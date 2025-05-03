@@ -2,63 +2,126 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from LLMClass import NvidiaChatClient
+import asyncio
+from bunqapifunc import BunqManager
 
-# Initialize session state for view toggle
+client = NvidiaChatClient(api_key="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")
+
+
+
+manager = BunqManager(api_key="a5a860e2667aa5354ee983ceb286f40a35c097c68e24286def450de5111bb20c")
+raw_data = manager.list_all_payments()
+# Setup view state
 if 'view' not in st.session_state:
     st.session_state.view = 'dashboard'
 
-# Dummy data
-categories = ['Rent', 'Food', 'Transport', 'Entertainment', 'Others']
-expenses = [500, 300, 150, 100, 50]
-dates = pd.date_range(start='2024-01-01', periods=6, freq='M')
-monthly_expenses = np.random.randint(400, 800, size=6)
+def load_expenses():
+    
+    # categores = await client.finance_CategoryBot(raw_data)
+    # print(categores)
+    # Clean and convert to DataFrame
+    records = []
+    for item in raw_data:
+        print(item)
+        raw_amount = item['amount'].replace(' EUR', '').strip()
+        try:
+            amount = float(raw_amount.replace(',', ''))  # Keep sign as-is
+        except ValueError:
+            amount = 0.0
+        desc = item['description'].strip() if item['description'] else "Unknown"
+        print(item['description'])
+        # Very basic category inference
+        if 'thuisbezorgd' in desc.lower():
+            category = 'Food Delivery'
+        elif 'soundcloud' in desc.lower():
+            category = 'Subscription'
+        elif amount <= -300:
+            category = 'Rent/Big Expense'
+        else:
+            category = 'Other'
 
+        records.append({'Description': desc, 'Amount': amount, 'Category': category})
+
+    df = pd.DataFrame(records)
+    return df
 # Function: Dashboard
+async def getInsights():
+    insights = await client.insights(raw_data)
+    return insights
+    # print(categores)
+
 def show_dashboard():
-    st.title("💰 Expense Dashboard")
+    df = load_expenses()
 
-    # Pie chart
-    st.subheader("Expenses by Category")
-    fig1, ax1 = plt.subplots()
-    ax1.pie(expenses, labels=categories, autopct='%1.1f%%', startangle=90)
-    ax1.axis('equal')
-    st.pyplot(fig1)
+    # Group by category
+    st.title("Finanical Assistant")
 
-    # Line chart
-    st.subheader("Monthly Expense Trend")
-    df = pd.DataFrame({'Date': dates, 'Expense': monthly_expenses})
-    df = df.set_index('Date')
-    st.line_chart(df)
+    # Group by category
+    summary_df = df.groupby('Category')['Amount'].sum().reset_index()
 
-    # Button to go to chatbot
-    if st.button("🗨️ Chat with BudgetBot"):
-        st.session_state.view = 'chat'
+    # Bar chart
+    st.subheader("Payments Overview")
+    st.bar_chart(summary_df.set_index('Category'))
+
+    # Insights Section
+    with st.expander("🔍 Insights"):
+        st.markdown("### 💡 Recommended Insights")
+        insights=asyncio.run(getInsights())
+        st.markdown(insights)
+        st.markdown("- Entertainment is under control. Great job!")
+
+    # Styled Chat Button
+    st.markdown(
+        """
+        <style>
+        .round-button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 12px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin-top: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .round-button:hover {
+            background-color: #45a049;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    if st.markdown('<a href="#" class="round-button">💬</a>', unsafe_allow_html=True):
+        if st.button("Go to Chat"):  # hidden actual logic button
+            st.session_state.view = 'chat'
 
 # Function: Chatbot
 def show_chat():
-    st.title("🧠 BudgetBot - Your Expense Assistant")
+    st.title("🤖 BudgetBot")
 
-    # Back button
     if st.button("🔙 Back to Dashboard"):
         st.session_state.view = 'dashboard'
 
-    # Display previous messages
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).markdown(msg["content"])
 
-    # Chat input
-    prompt = st.chat_input("Ask about your expenses...")
+    prompt = st.chat_input("Ask anything about your expenses...")
     if prompt:
         st.session_state.chat_history.append({"role": "user", "content": prompt})
-        # Dummy response
-        response = "I'm a demo bot. Try asking 'How much did I spend on food?'"
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
-        st.chat_message("assistant").markdown(response)
+        # Dummy reply
+        reply = "I'm a simple bot. Try asking about your largest expense!"
+        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        st.chat_message("assistant").markdown(reply)
 
-# Render based on view
+# App router
 if st.session_state.view == 'dashboard':
     show_dashboard()
 else:
