@@ -104,19 +104,3 @@ class BunqManager:
         return [notification_filter]
 
 
-# Example usage
-# if __name__ == "__main__":
-
-    # print("User ID:", ban.get_user_id())
-    # print("Accounts:", bunq.get_all_accounts())
-    # print("Payments:", bunq.list_payments(2108357))
-
-    # account_info = bunq.get_account_by_id(2108357)
-    # print("Primary Account Info:", account_info)
-
-    # Example of updating daily limit
-    # bunq.update_account_daily_limit(bunq.primary_account.id_, "500.00")
-
-    # Example of creating bunq.me tab
-    # share_url = bunq.create_bunq_me_tab("1.00", "EUR", "Service Payment", "https://bunq.com")
-    # print("bunq.me share URL:", share_url)

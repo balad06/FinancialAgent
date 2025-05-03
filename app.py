@@ -5,33 +5,35 @@ import matplotlib.pyplot as plt
 from LLMClass import NvidiaChatClient
 import asyncio
 from bunqapifunc import BunqManager
+import nest_asyncio
 
 client = NvidiaChatClient(api_key="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")
 
 
 
 manager = BunqManager(api_key="a5a860e2667aa5354ee983ceb286f40a35c097c68e24286def450de5111bb20c")
-raw_data = manager.list_all_payments()
-# Setup view state
-if 'view' not in st.session_state:
-    st.session_state.view = 'dashboard'
+client.load_saved_index()
+
+
+def async_to_sync(awaitable):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    result = loop.run_until_complete(awaitable)
+    loop.close()
+    return result
 
 def load_expenses():
-    
-    # categores = await client.finance_CategoryBot(raw_data)
-    # print(categores)
-    # Clean and convert to DataFrame
+    raw_data = manager.list_all_payments()
     records = []
     for item in raw_data:
-        print(item)
         raw_amount = item['amount'].replace(' EUR', '').strip()
         try:
-            amount = float(raw_amount.replace(',', ''))  # Keep sign as-is
+            amount = float(raw_amount.replace(',', ''))
         except ValueError:
             amount = 0.0
         desc = item['description'].strip() if item['description'] else "Unknown"
-        print(item['description'])
-        # Very basic category inference
+
+        # Basic rule-based category
         if 'thuisbezorgd' in desc.lower():
             category = 'Food Delivery'
         elif 'soundcloud' in desc.lower():
@@ -43,35 +45,27 @@ def load_expenses():
 
         records.append({'Description': desc, 'Amount': amount, 'Category': category})
 
-    df = pd.DataFrame(records)
-    return df
-# Function: Dashboard
-async def getInsights():
-    insights = await client.insights(raw_data)
-    return insights
-    # print(categores)
+    return pd.DataFrame(records)
 
+# 🧠 Call LLM for insights
+async def getInsights(raw_data):
+    return await client.insights(raw_data)
+
+# 📈 Dashboard view
 def show_dashboard():
     df = load_expenses()
 
-    # Group by category
-    st.title("Finanical Assistant")
-
-    # Group by category
+    st.title("📊 Financial Assistant")
     summary_df = df.groupby('Category')['Amount'].sum().reset_index()
 
-    # Bar chart
     st.subheader("Payments Overview")
     st.bar_chart(summary_df.set_index('Category'))
 
-    # Insights Section
     with st.expander("🔍 Insights"):
         st.markdown("### 💡 Recommended Insights")
-        insights=asyncio.run(getInsights())
+        insights = async_to_sync(getInsights(df))
         st.markdown(insights)
-        st.markdown("- Entertainment is under control. Great job!")
 
-    # Styled Chat Button
     st.markdown(
         """
         <style>
@@ -96,11 +90,7 @@ def show_dashboard():
         unsafe_allow_html=True
     )
 
-    if st.markdown('<a href="#" class="round-button">💬</a>', unsafe_allow_html=True):
-        if st.button("Go to Chat"):  # hidden actual logic button
-            st.session_state.view = 'chat'
-
-# Function: Chatbot
+# 🧑‍💼 Chatbot view
 def show_chat():
     st.title("🤖 BudgetBot")
 
@@ -116,12 +106,28 @@ def show_chat():
     prompt = st.chat_input("Ask anything about your expenses...")
     if prompt:
         st.session_state.chat_history.append({"role": "user", "content": prompt})
-        # Dummy reply
-        reply = "I'm a simple bot. Try asking about your largest expense!"
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
-        st.chat_message("assistant").markdown(reply)
+        st.chat_message("user").markdown(prompt)
 
-# App router
+        with st.chat_message("assistant"):
+            response = async_to_sync(
+                client.stream_chat(
+                    system_prompt="You are a helpful personal finance assistant. Answer only from the context provided.",
+                    user_prompt=prompt
+                )
+            )
+            st.markdown(response)
+
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+
+
+# 🔁 Routing logic
+if 'view' not in st.session_state:
+    st.session_state.view = 'dashboard'
+
+if st.button("💬 Chat with BudgetBot"):
+    st.session_state.view = 'chat'
+
 if st.session_state.view == 'dashboard':
     show_dashboard()
 else:

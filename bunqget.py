@@ -10,7 +10,7 @@ import time
 # Create an API context for production
 api_context = ApiContext.create(
     ApiEnvironmentType.SANDBOX,
-    "a5a860e2667aa5354ee983ceb286f40a35c097c68e24286def450de5111bb20c",
+    "bc152446030561017e81d49f4eef51e611e70d25a52978fd302be7ecaf1c3d18",
     "My Device Description"
 )
 
